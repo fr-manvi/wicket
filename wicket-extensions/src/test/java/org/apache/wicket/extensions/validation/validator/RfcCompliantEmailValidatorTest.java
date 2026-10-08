@@ -19,9 +19,12 @@ package org.apache.wicket.extensions.validation.validator;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.concurrent.TimeUnit;
+
 import org.apache.wicket.validation.IValidator;
 import org.apache.wicket.validation.Validatable;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 /**
  * Test that it really validates RFC valid email addresses.
@@ -70,5 +73,49 @@ public class RfcCompliantEmailValidatorTest
 			validator.validate(validatable);
 			assertFalse(validatable.isValid(), emailAddress + " was valid but shouldn't be");
 		}
+	}
+
+	/**
+	 * Test the quoted string forms of the local part, where ordinary text and folding white space
+	 * meet.
+	 */
+	@Test
+	public void testQuotedStringLocalParts()
+	{
+		IValidator<String> validator = RfcCompliantEmailAddressValidator.getInstance();
+
+		String[] validEmails = new String[] { "\"a b  c\"@email.com", "\"a\\\"b\"@email.com",
+				"\"a\\\\b\"@email.com", "\"a\tb\"@email.com", "\"a\r\n b\"@email.com",
+				"\"\"@email.com", "\" \"@email.com" };
+		for (String emailAddress : validEmails)
+		{
+			Validatable<String> validatable = new Validatable<>(emailAddress);
+			validator.validate(validatable);
+			assertTrue(validatable.isValid(), emailAddress + " wasn't valid but should be");
+		}
+
+		String[] inValidEmails = new String[] { "\"a\rb\"@email.com", "\"unterminated@email.com" };
+		for (String emailAddress : inValidEmails)
+		{
+			Validatable<String> validatable = new Validatable<>(emailAddress);
+			validator.validate(validatable);
+			assertFalse(validatable.isValid(), emailAddress + " was valid but shouldn't be");
+		}
+	}
+
+	/**
+	 * A quoted string holding a run of spaces has one parse, not one per space, so rejecting it
+	 * takes linear rather than exponential time.
+	 */
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+	public void testQuotedStringOfSpacesIsRejectedInLinearTime()
+	{
+		IValidator<String> validator = RfcCompliantEmailAddressValidator.getInstance();
+
+		String emailAddress = "\"" + " ".repeat(64) + "x";
+		Validatable<String> validatable = new Validatable<>(emailAddress);
+		validator.validate(validatable);
+		assertFalse(validatable.isValid(), emailAddress + " was valid but shouldn't be");
 	}
 }
